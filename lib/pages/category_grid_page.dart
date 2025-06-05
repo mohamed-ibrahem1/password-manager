@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:passwords/pages/password_list_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CategoryGridPage extends StatefulWidget {
   const CategoryGridPage({super.key});
@@ -9,14 +10,26 @@ class CategoryGridPage extends StatefulWidget {
 }
 
 class _CategoryGridPageState extends State<CategoryGridPage> {
-  final List<String> _categories = [
-    'Emails',
-    'Payment',
-    'Social Media',
-    'Personal',
-    'Work',
-    'Other',
-  ];
+  final List<String> _categories = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedCategories = prefs.getStringList('categories') ?? [];
+    setState(() {
+      _categories.addAll(savedCategories);
+    });
+  }
+
+  Future<void> _saveCategories() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('categories', _categories);
+  }
 
   void _showAddCategoryDialog() {
     String newCategory = '';
@@ -41,6 +54,7 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
                 setState(() {
                   _categories.add(newCategory.trim());
                 });
+                _saveCategories();
                 Navigator.pop(context);
               }
             },
@@ -68,6 +82,7 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
               setState(() {
                 _categories.removeAt(index);
               });
+              _saveCategories();
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(

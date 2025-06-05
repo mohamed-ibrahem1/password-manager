@@ -258,19 +258,21 @@ class _PasswordListPageState extends State<PasswordListPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: const Icon(Icons.delete, color: Colors.white),
                   ),
-                  onDismissed: (direction) {
-                    _deleteEntry(entry);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Password deleted')),
-                    );
+                  confirmDismiss: (direction) async {
+                    // Prevent auto-dismiss, just reveal the background
+                    return false;
                   },
-                  child: GestureDetector(
+                  child: SwipeToDeleteCard(
+                    entry: entry,
+                    onCopy: _copyToClipboard,
+                    onDelete: () {
+                      _deleteEntry(entry);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Password deleted')),
+                      );
+                    },
                     onTap: () => _showEntryBottomSheet(
                         entry: entry, index: _entries.indexOf(entry)),
-                    child: PasswordCard(
-                      entry: entry,
-                      onCopy: _copyToClipboard,
-                    ),
                   ),
                 );
               },
@@ -300,7 +302,7 @@ class PasswordCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.all(8),
+      // margin: const EdgeInsets.all(8),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -335,6 +337,101 @@ class PasswordCard extends StatelessWidget {
                 )),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class SwipeToDeleteCard extends StatefulWidget {
+  final PasswordEntry entry;
+  final void Function(String) onCopy;
+  final VoidCallback onDelete;
+  final VoidCallback onTap;
+
+  const SwipeToDeleteCard({
+    super.key,
+    required this.entry,
+    required this.onCopy,
+    required this.onDelete,
+    required this.onTap,
+  });
+
+  @override
+  State<SwipeToDeleteCard> createState() => _SwipeToDeleteCardState();
+}
+
+class _SwipeToDeleteCardState extends State<SwipeToDeleteCard> {
+  double _offset = 0.0;
+  static const double maxOffset = 80.0;
+  static const double cardRadius = 12.0;
+  static const EdgeInsets cardMargin = EdgeInsets.all(8);
+
+  bool get isDeleteActive => _offset > maxOffset / 2;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: cardMargin,
+      child: Stack(
+        children: [
+          // Delete background fills the card
+          Positioned.fill(
+            child: Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(cardRadius),
+              ),
+              margin: EdgeInsets.zero,
+              color: Colors.red,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  AnimatedOpacity(
+                    opacity: isDeleteActive ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 150),
+                    child: IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.white),
+                      onPressed: isDeleteActive ? widget.onDelete : null,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ),
+            ),
+          ),
+          // Swipable card
+          Transform.translate(
+            offset: Offset(-_offset, 0),
+            child: GestureDetector(
+              onHorizontalDragUpdate: (details) {
+                setState(() {
+                  _offset = (_offset - details.delta.dx).clamp(0.0, maxOffset);
+                });
+              },
+              onHorizontalDragEnd: (details) {
+                setState(() {
+                  if (_offset > maxOffset / 2) {
+                    _offset = maxOffset;
+                  } else {
+                    _offset = 0.0;
+                  }
+                });
+              },
+              onTap: widget.onTap,
+              child: Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(cardRadius),
+                ),
+                margin: EdgeInsets.zero,
+                child: PasswordCard(
+                  entry: widget.entry,
+                  onCopy: widget.onCopy,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

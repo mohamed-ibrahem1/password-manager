@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import 'pages/category_grid_page.dart';
+import 'package:passwords/pages/lock_screen_page.dart';
 
 void main() {
   runApp(const PasswordManagerApp());
@@ -19,14 +18,13 @@ class PasswordManagerApp extends StatelessWidget {
         useMaterial3: true,
       ),
       darkTheme: ThemeData.dark().copyWith(
-        useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepPurple,
           brightness: Brightness.dark,
         ),
       ),
       themeMode: ThemeMode.dark,
-      home: const CategoryGridPage(),
+      home: const LockScreen(),
     );
   }
 }
