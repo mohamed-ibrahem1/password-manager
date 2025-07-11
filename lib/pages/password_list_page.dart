@@ -171,6 +171,8 @@ class _PasswordListPageState extends State<PasswordListPage> {
                         child: const Text('Cancel'),
                       ),
                       ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.deepPurple),
                         onPressed: () {
                           final validFields = <MapEntry<String, String>>[];
                           for (int i = 0; i < labelControllers.length; i++) {

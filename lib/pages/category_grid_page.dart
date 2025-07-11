@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:passwords/pages/password_generator_page.dart';
 import 'package:passwords/pages/password_list_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -105,6 +108,20 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
           style: TextStyle(
               fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.password),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PasswordGeneratorPage(),
+                ),
+              );
+            },
+            tooltip: 'Generate Password',
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(8.0),
@@ -146,6 +163,56 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
         onPressed: _showAddCategoryDialog,
         tooltip: 'Add Category',
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+class DesktopLongPressDetector extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onLongPress;
+  final Duration duration;
+
+  const DesktopLongPressDetector({
+    Key? key,
+    required this.child,
+    required this.onLongPress,
+    this.duration = const Duration(milliseconds: 500),
+  }) : super(key: key);
+
+  @override
+  State<DesktopLongPressDetector> createState() =>
+      _DesktopLongPressDetectorState();
+}
+
+class _DesktopLongPressDetectorState extends State<DesktopLongPressDetector> {
+  Timer? _timer;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Listener(
+        onPointerDown: (event) {
+          _timer = Timer(widget.duration, () {
+            widget.onLongPress();
+          });
+        },
+        onPointerUp: (event) {
+          _timer?.cancel();
+          _timer = null;
+        },
+        onPointerCancel: (event) {
+          _timer?.cancel();
+          _timer = null;
+        },
+        child: widget.child,
       ),
     );
   }

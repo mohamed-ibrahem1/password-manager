@@ -11,12 +11,15 @@ class LockScreen extends StatefulWidget {
 }
 
 class _LockScreenState extends State<LockScreen> {
+  // Authentication status
   bool _authenticated = false;
   bool _checking = false;
   String? _error;
+  // Password input variables
   bool _showPasswordInput = false;
   final TextEditingController _passwordController = TextEditingController();
   bool _obscureText = true;
+  // Password state
   bool _isPasswordSet = false;
   bool _isCreatingPassword = false;
 
@@ -26,6 +29,7 @@ class _LockScreenState extends State<LockScreen> {
     _checkIfPasswordIsSet();
   }
 
+  // add initial password check method
   Future<void> _checkIfPasswordIsSet() async {
     final prefs = await SharedPreferences.getInstance();
     final password = prefs.getString('app_password');
@@ -35,6 +39,7 @@ class _LockScreenState extends State<LockScreen> {
     });
   }
 
+  // fingerprint authentication method
   Future<void> _authenticate() async {
     setState(() {
       _checking = true;
@@ -73,6 +78,9 @@ class _LockScreenState extends State<LockScreen> {
     }
   }
 
+  //////////////////////////////////////////////////////////////////
+
+  // password authentication methods
   Future<void> _createPassword() async {
     if (_passwordController.text.length < 6) {
       setState(() {
@@ -92,6 +100,7 @@ class _LockScreenState extends State<LockScreen> {
     });
   }
 
+  // Verify existing password
   Future<void> _verifyPassword() async {
     final prefs = await SharedPreferences.getInstance();
     final storedPassword = prefs.getString('app_password');
@@ -109,6 +118,7 @@ class _LockScreenState extends State<LockScreen> {
     }
   }
 
+  // Toggle password input visibility
   void _togglePasswordInput() {
     setState(() {
       _showPasswordInput = !_showPasswordInput;
@@ -117,6 +127,7 @@ class _LockScreenState extends State<LockScreen> {
     });
   }
 
+  // UI for the lock screen
   @override
   Widget build(BuildContext context) {
     if (_authenticated) {
