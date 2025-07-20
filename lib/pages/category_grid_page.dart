@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:passwords/pages/password_generator_page.dart';
 import 'package:passwords/pages/password_list_page.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../services/firestore_service.dart';
 
 class CategoryGridPage extends StatefulWidget {
   const CategoryGridPage({super.key});
@@ -13,7 +14,9 @@ class CategoryGridPage extends StatefulWidget {
 }
 
 class _CategoryGridPageState extends State<CategoryGridPage> {
+  final FirestoreService _firestoreService = FirestoreService();
   final List<String> _categories = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -22,16 +25,24 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
   }
 
   Future<void> _loadCategories() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedCategories = prefs.getStringList('categories') ?? [];
-    setState(() {
-      _categories.addAll(savedCategories);
-    });
-  }
+    setState(() => _isLoading = true);
+    try {
+      // Get unique categories from Firebase passwords
+      final passwords = await _firestoreService.getPasswords();
+      final categories = passwords.map((p) => p.category).toSet().toList();
 
-  Future<void> _saveCategories() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('categories', _categories);
+      setState(() {
+        _categories.clear();
+        _categories.addAll(categories);
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading categories: $e');
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading categories: $e')),
+      );
+    }
   }
 
   void _showAddCategoryDialog() {
@@ -57,8 +68,15 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
                 setState(() {
                   _categories.add(newCategory.trim());
                 });
-                _saveCategories();
                 Navigator.pop(context);
+                // Navigate directly to password list for new category
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        PasswordListPage(category: newCategory.trim()),
+                  ),
+                ).then((_) => _loadCategories()); // Refresh when returning
               }
             },
             child: const Text('Add'),
@@ -68,25 +86,32 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
     );
   }
 
-  void _showDeleteCategoryDialog(int index) {
+  void _showDeleteCategoryDialog(String category) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Category'),
-        content:
-            Text('Are you sure you want to delete "${_categories[index]}"?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Are you sure you want to delete "$category"?'),
+            SizedBox(height: 8),
+            Text(
+              'This will delete all passwords in this category.',
+              style: TextStyle(color: Colors.red, fontSize: 12),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _categories.removeAt(index);
-              });
-              _saveCategories();
+            onPressed: () async {
               Navigator.pop(context);
+              await _deleteCategoryAndPasswords(category);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
@@ -97,6 +122,30 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _deleteCategoryAndPasswords(String category) async {
+    try {
+      // Get all passwords in this category
+      final passwords = await _firestoreService.getPasswords();
+      final categoryPasswords = passwords.where((p) => p.category == category);
+
+      // Delete all passwords in this category
+      for (final password in categoryPasswords) {
+        await _firestoreService.deletePassword(password.id!);
+      }
+
+      // Refresh categories
+      await _loadCategories();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Category "$category" deleted successfully')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error deleting category: $e')),
+      );
+    }
   }
 
   @override
@@ -121,43 +170,124 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
             },
             tooltip: 'Generate Password',
           ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadCategories,
+            tooltip: 'Refresh Categories',
+          ),
         ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(8.0),
-        child: GridView.builder(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            childAspectRatio: 1.2,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-          ),
-          itemCount: _categories.length,
-          itemBuilder: (context, index) {
-            final category = _categories[index];
-            return GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => PasswordListPage(category: category),
+        child: _isLoading
+            ? Center(child: CircularProgressIndicator())
+            : _categories.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.folder_open, size: 64, color: Colors.grey),
+                        SizedBox(height: 16),
+                        Text('No categories yet',
+                            style: TextStyle(fontSize: 18)),
+                        SizedBox(height: 8),
+                        Text('Tap + to create your first category'),
+                      ],
+                    ),
+                  )
+                : StreamBuilder(
+                    stream: _firestoreService.getPasswordsStream(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData) {
+                        // Update categories when data changes
+                        final passwords = snapshot.data ?? [];
+                        final liveCategories =
+                            passwords.map((p) => p.category).toSet().toList();
+
+                        // Only update if categories actually changed
+                        if (liveCategories.length != _categories.length ||
+                            !liveCategories.every(_categories.contains)) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            setState(() {
+                              _categories.clear();
+                              _categories.addAll(liveCategories);
+                            });
+                          });
+                        }
+                      }
+
+                      return GridView.builder(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 1.2,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                        ),
+                        itemCount: _categories.length,
+                        itemBuilder: (context, index) {
+                          final category = _categories[index];
+                          return DesktopLongPressDetector(
+                            onLongPress: () =>
+                                _showDeleteCategoryDialog(category),
+                            child: GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        PasswordListPage(category: category),
+                                  ),
+                                ).then((_) =>
+                                    _loadCategories()); // Refresh when returning
+                              },
+                              // Removed onLongPress to prevent duplicate dialogs
+                              child: Card(
+                                elevation: 4,
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        category,
+                                        style: const TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      SizedBox(height: 8),
+                                      StreamBuilder(
+                                        stream: _firestoreService
+                                            .getPasswordsStream(),
+                                        builder: (context, snapshot) {
+                                          if (snapshot.hasData) {
+                                            final passwords =
+                                                snapshot.data ?? [];
+                                            final categoryCount = passwords
+                                                .where((p) =>
+                                                    p.category == category)
+                                                .length;
+                                            return Text(
+                                              '$categoryCount password${categoryCount != 1 ? 's' : ''}',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                color: Colors.grey[600],
+                                              ),
+                                            );
+                                          }
+                                          return SizedBox.shrink();
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
                   ),
-                );
-              },
-              onLongPress: () => _showDeleteCategoryDialog(index),
-              child: Card(
-                elevation: 4,
-                child: Center(
-                  child: Text(
-                    category,
-                    style: const TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddCategoryDialog,

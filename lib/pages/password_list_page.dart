@@ -1,10 +1,8 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/password_entry.dart';
+import '../services/firestore_service.dart';
 
 class PasswordListPage extends StatefulWidget {
   final String category;
@@ -15,15 +13,9 @@ class PasswordListPage extends StatefulWidget {
 }
 
 class _PasswordListPageState extends State<PasswordListPage> {
-  List<PasswordEntry> _entries = [];
+  final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadEntries();
-  }
 
   @override
   void dispose() {
@@ -31,42 +23,43 @@ class _PasswordListPageState extends State<PasswordListPage> {
     super.dispose();
   }
 
-  Future<void> _loadEntries() async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = 'passwords_${widget.category}';
-    final data = prefs.getStringList(key) ?? [];
-    setState(() {
-      _entries =
-          data.map((e) => PasswordEntry.fromJson(json.decode(e))).toList();
-    });
+  Future<void> _addEntry(PasswordEntry entry) async {
+    try {
+      await _firestoreService.savePassword(entry);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password added successfully')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error adding password: $e')),
+      );
+    }
   }
 
-  Future<void> _saveEntries() async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = 'passwords_${widget.category}';
-    final data = _entries.map((e) => json.encode(e.toJson())).toList();
-    await prefs.setStringList(key, data);
+  Future<void> _updateEntry(PasswordEntry entry) async {
+    try {
+      await _firestoreService.updatePassword(entry);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password updated successfully')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating password: $e')),
+      );
+    }
   }
 
-  void _addEntry(PasswordEntry entry) {
-    setState(() {
-      _entries.add(entry);
-    });
-    _saveEntries();
-  }
-
-  void _updateEntry(PasswordEntry entry, int index) {
-    setState(() {
-      _entries[index] = entry;
-    });
-    _saveEntries();
-  }
-
-  void _deleteEntry(PasswordEntry entry) {
-    setState(() {
-      _entries.remove(entry);
-    });
-    _saveEntries();
+  Future<void> _deleteEntry(PasswordEntry entry) async {
+    try {
+      await _firestoreService.deletePassword(entry.id!);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password deleted')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error deleting password: $e')),
+      );
+    }
   }
 
   void _copyToClipboard(String text) {
@@ -76,8 +69,8 @@ class _PasswordListPageState extends State<PasswordListPage> {
     );
   }
 
-  void _showEntryBottomSheet({PasswordEntry? entry, int? index}) {
-    final isEdit = entry != null && index != null;
+  void _showEntryBottomSheet({PasswordEntry? entry}) {
+    final isEdit = entry != null;
     final titleController = TextEditingController(text: entry?.title ?? '');
     List<TextEditingController> labelControllers =
         entry?.fields.map((f) => TextEditingController(text: f.key)).toList() ??
@@ -173,7 +166,7 @@ class _PasswordListPageState extends State<PasswordListPage> {
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.deepPurple),
-                        onPressed: () {
+                        onPressed: () async {
                           final validFields = <MapEntry<String, String>>[];
                           for (int i = 0; i < labelControllers.length; i++) {
                             final key = labelControllers[i].text.trim();
@@ -184,17 +177,21 @@ class _PasswordListPageState extends State<PasswordListPage> {
                           }
                           if (titleController.text.trim().isNotEmpty &&
                               validFields.isNotEmpty) {
+                            // Close the bottom sheet first
+                            Navigator.pop(context);
+
                             final newEntry = PasswordEntry(
+                              id: isEdit ? entry!.id : null,
                               title: titleController.text.trim(),
                               fields: validFields,
                               category: widget.category,
                             );
+
                             if (isEdit) {
-                              _updateEntry(newEntry, index!);
+                              await _updateEntry(newEntry);
                             } else {
-                              _addEntry(newEntry);
+                              await _addEntry(newEntry);
                             }
-                            Navigator.pop(context);
                           }
                         },
                         child: Text(isEdit ? 'Save' : 'Add'),
@@ -213,11 +210,6 @@ class _PasswordListPageState extends State<PasswordListPage> {
 
   @override
   Widget build(BuildContext context) {
-    final filteredEntries = _entries
-        .where((entry) =>
-            entry.title.toLowerCase().contains(_searchQuery.toLowerCase()))
-        .toList();
-
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -246,36 +238,70 @@ class _PasswordListPageState extends State<PasswordListPage> {
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              itemCount: filteredEntries.length,
-              itemBuilder: (context, index) {
-                final entry = filteredEntries[index];
-                return Dismissible(
-                  key: ValueKey(entry.title +
-                      entry.fields.map((e) => e.key + e.value).join()),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    color: Colors.red,
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: const Icon(Icons.delete, color: Colors.white),
-                  ),
-                  confirmDismiss: (direction) async {
-                    // Prevent auto-dismiss, just reveal the background
-                    return false;
+            child: StreamBuilder<List<PasswordEntry>>(
+              stream: _firestoreService.getPasswordsStream(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+
+                // Filter passwords by category and search query
+                final allPasswords = snapshot.data ?? [];
+                final filteredEntries = allPasswords
+                    .where((password) => password.category == widget.category)
+                    .where((entry) => entry.title
+                        .toLowerCase()
+                        .contains(_searchQuery.toLowerCase()))
+                    .toList();
+
+                if (filteredEntries.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.lock_outline, size: 64, color: Colors.grey),
+                        SizedBox(height: 16),
+                        Text(_searchQuery.isEmpty
+                            ? 'No passwords in this category'
+                            : 'No passwords found'),
+                        SizedBox(height: 8),
+                        Text(_searchQuery.isEmpty
+                            ? 'Tap + to add your first password'
+                            : 'Try a different search term'),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  itemCount: filteredEntries.length,
+                  itemBuilder: (context, index) {
+                    final entry = filteredEntries[index];
+                    return Dismissible(
+                      key: ValueKey(entry.id ?? entry.title),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        color: Colors.red,
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: const Icon(Icons.delete, color: Colors.white),
+                      ),
+                      confirmDismiss: (direction) async {
+                        // Prevent auto-dismiss, just reveal the background
+                        return false;
+                      },
+                      child: SwipeToDeleteCard(
+                        entry: entry,
+                        onCopy: _copyToClipboard,
+                        onDelete: () => _deleteEntry(entry),
+                        onTap: () => _showEntryBottomSheet(entry: entry),
+                      ),
+                    );
                   },
-                  child: SwipeToDeleteCard(
-                    entry: entry,
-                    onCopy: _copyToClipboard,
-                    onDelete: () {
-                      _deleteEntry(entry);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Password deleted')),
-                      );
-                    },
-                    onTap: () => _showEntryBottomSheet(
-                        entry: entry, index: _entries.indexOf(entry)),
-                  ),
                 );
               },
             ),
@@ -304,7 +330,6 @@ class PasswordCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      // margin: const EdgeInsets.all(8),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
