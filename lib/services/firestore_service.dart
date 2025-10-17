@@ -61,7 +61,7 @@ class FirestoreService {
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => PasswordEntry.fromJson(
-                  doc.data() as Map<String, dynamic>,
+                  doc.data(),
                   id: doc.id,
                 ))
             .toList());

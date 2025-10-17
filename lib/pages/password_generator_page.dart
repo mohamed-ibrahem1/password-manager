@@ -48,131 +48,241 @@ class _PasswordGeneratorPageState extends State<PasswordGeneratorPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Password Generator'),
-        centerTitle: true,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(height: 20),
-            TextField(
-              controller: _generatedPasswordController,
-              readOnly: true,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              decoration: InputDecoration(
-                labelText: 'Generated Password',
-                border: const OutlineInputBorder(),
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.copy),
-                      onPressed: _copyToClipboard,
-                      tooltip: 'Copy password',
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.refresh),
-                      onPressed: _generatePassword,
-                      tooltip: 'Generate new password',
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 30),
+            // Generated Password Display - Material 3 Card
             Card(
+              elevation: 2,
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(20.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Password Options',
-                      style: Theme.of(context).textTheme.titleMedium,
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.key_rounded,
+                          color: colorScheme.primary,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Generated Password',
+                          style: textTheme.titleMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: SelectableText(
+                        _generatedPasswordController.text,
+                        style: textTheme.headlineSmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 2,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 16),
                     Row(
                       children: [
                         Expanded(
-                          child: Text('Length: $_passwordLength'),
+                          child: FilledButton.icon(
+                            onPressed: _generatePassword,
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: Text(
+                              'Regenerate',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ),
                         ),
+                        const SizedBox(width: 12),
                         Expanded(
-                          flex: 2,
-                          child: Slider(
-                            value: _passwordLength.toDouble(),
-                            min: 6,
-                            max: 20,
-                            divisions: 14,
-                            label: _passwordLength.toString(),
-                            onChanged: (value) {
-                              setState(() {
-                                _passwordLength = value.toInt();
-                              });
-                            },
+                          child: FilledButton.tonalIcon(
+                            onPressed: _copyToClipboard,
+                            icon: const Icon(Icons.copy_rounded),
+                            label: const Text('Copy'),
                           ),
                         ),
                       ],
-                    ),
-                    CheckboxListTile(
-                      title: const Text('Include Uppercase Letters'),
-                      subtitle: const Text('A, B, C...'),
-                      value: _includeUppercase,
-                      onChanged: (value) {
-                        setState(() {
-                          _includeUppercase = value ?? true;
-                        });
-                      },
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                    CheckboxListTile(
-                      title: const Text('Include Numbers'),
-                      subtitle: const Text('0, 1, 2...'),
-                      value: _includeNumbers,
-                      onChanged: (value) {
-                        setState(() {
-                          _includeNumbers = value ?? true;
-                        });
-                      },
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                    CheckboxListTile(
-                      title: const Text('Include Special Characters'),
-                      subtitle: const Text('!, @, #...'),
-                      value: _includeSpecialChars,
-                      onChanged: (value) {
-                        setState(() {
-                          _includeSpecialChars = value ?? true;
-                        });
-                      },
-                      controlAffinity: ListTileControlAffinity.leading,
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: _generatePassword,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Generate New Password'),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size.fromHeight(50),
-              ),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _copyToClipboard,
-              icon: const Icon(Icons.copy),
-              label: const Text('Copy to Clipboard'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(50),
+            const SizedBox(height: 24),
+            // Options Card - Material 3 styling
+            Card(
+              elevation: 1,
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Options',
+                      style: textTheme.titleLarge?.copyWith(
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Password Length Slider
+                    Text(
+                      'Password Length',
+                      style: textTheme.titleSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Slider(
+                            value: _passwordLength.toDouble(),
+                            min: 6,
+                            max: 32,
+                            divisions: 26,
+                            label: _passwordLength.toString(),
+                            onChanged: (value) {
+                              setState(() {
+                                _passwordLength = value.toInt();
+                                _generatePassword();
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            '$_passwordLength',
+                            style: textTheme.titleMedium?.copyWith(
+                              color: colorScheme.onPrimaryContainer,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Divider(color: colorScheme.outlineVariant),
+                    const SizedBox(height: 8),
+                    // Character Options with Material 3 styling
+                    _buildOptionTile(
+                      context,
+                      title: 'Uppercase Letters',
+                      subtitle: 'A, B, C...',
+                      icon: Icons.text_fields_rounded,
+                      value: _includeUppercase,
+                      onChanged: (value) {
+                        setState(() {
+                          _includeUppercase = value ?? true;
+                          _generatePassword();
+                        });
+                      },
+                    ),
+                    _buildOptionTile(
+                      context,
+                      title: 'Numbers',
+                      subtitle: '0, 1, 2...',
+                      icon: Icons.pin_rounded,
+                      value: _includeNumbers,
+                      onChanged: (value) {
+                        setState(() {
+                          _includeNumbers = value ?? true;
+                          _generatePassword();
+                        });
+                      },
+                    ),
+                    _buildOptionTile(
+                      context,
+                      title: 'Special Characters',
+                      subtitle: '!, @, #...',
+                      icon: Icons.tag_rounded,
+                      value: _includeSpecialChars,
+                      onChanged: (value) {
+                        setState(() {
+                          _includeSpecialChars = value ?? true;
+                          _generatePassword();
+                        });
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOptionTile(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool value,
+    required ValueChanged<bool?> onChanged,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        color: value ? colorScheme.secondaryContainer.withOpacity(0.5) : null,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: CheckboxListTile(
+        secondary: Icon(
+          icon,
+          color: value
+              ? colorScheme.onSecondaryContainer
+              : colorScheme.onSurfaceVariant,
+        ),
+        title: Text(
+          title,
+          style: textTheme.bodyLarge?.copyWith(
+            color: colorScheme.onSurface,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: textTheme.bodyMedium?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+        value: value,
+        onChanged: onChanged,
+        activeColor: colorScheme.primary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
       ),
     );

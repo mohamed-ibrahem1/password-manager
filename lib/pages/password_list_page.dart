@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -15,11 +18,18 @@ class PasswordListPage extends StatefulWidget {
 class _PasswordListPageState extends State<PasswordListPage> {
   final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
+
+  bool _isDesktop() {
+    if (kIsWeb) return false;
+    return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -69,6 +79,33 @@ class _PasswordListPageState extends State<PasswordListPage> {
     );
   }
 
+  bool _matchesSearchQuery(PasswordEntry entry) {
+    if (_searchQuery.isEmpty) return true;
+
+    final query = _searchQuery.toLowerCase();
+
+    // Search in title
+    if (entry.title.toLowerCase().contains(query)) {
+      return true;
+    }
+
+    // Search in field keys (labels)
+    for (final field in entry.fields) {
+      if (field.key.toLowerCase().contains(query)) {
+        return true;
+      }
+    }
+
+    // Search in field values
+    for (final field in entry.fields) {
+      if (field.value.toLowerCase().contains(query)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   void _showEntryBottomSheet({PasswordEntry? entry}) {
     final isEdit = entry != null;
     final titleController = TextEditingController(text: entry?.title ?? '');
@@ -80,238 +117,803 @@ class _PasswordListPageState extends State<PasswordListPage> {
             .toList() ??
         [TextEditingController()];
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            left: 16,
-            right: 16,
-            top: 24,
-          ),
-          child: StatefulBuilder(
-            builder: (context, setStateSheet) => SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    isEdit ? 'Edit Password' : 'Add Password',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: titleController,
-                    decoration: const InputDecoration(labelText: 'Title'),
-                  ),
-                  const SizedBox(height: 16),
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: labelControllers.length,
-                    itemBuilder: (context, i) {
-                      return Row(
+    if (_isDesktop()) {
+      // Show dialog for desktop
+      showDialog(
+        context: context,
+        builder: (context) {
+          return Dialog(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 600,
+                maxHeight: MediaQuery.of(context).size.height * 0.85,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: StatefulBuilder(
+                  builder: (context, setStateDialog) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header - Fixed
+                      Row(
                         children: [
-                          Expanded(
-                            child: TextField(
-                              controller: labelControllers[i],
-                              decoration:
-                                  const InputDecoration(labelText: 'Label'),
-                            ),
+                          Icon(
+                            isEdit ? Icons.edit_rounded : Icons.add_rounded,
+                            size: 28,
+                            color: Theme.of(context).colorScheme.primary,
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: valueControllers[i],
-                              decoration:
-                                  const InputDecoration(labelText: 'Value'),
-                            ),
+                          const SizedBox(width: 12),
+                          Text(
+                            isEdit ? 'Edit Password' : 'Add Password',
+                            style: Theme.of(context).textTheme.headlineSmall,
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle),
-                            onPressed: labelControllers.length > 1
-                                ? () {
-                                    setStateSheet(() {
-                                      labelControllers.removeAt(i);
-                                      valueControllers.removeAt(i);
-                                    });
-                                  }
-                                : null,
+                          const Spacer(),
+                          IconButton.filledTonal(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => Navigator.pop(context),
                           ),
                         ],
-                      );
-                    },
-                  ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      onPressed: () {
-                        setStateSheet(() {
-                          labelControllers.add(TextEditingController());
-                          valueControllers.add(TextEditingController());
-                        });
-                      },
-                      child: const Text('Add Field'),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
                       ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepPurple),
-                        onPressed: () async {
-                          final validFields = <MapEntry<String, String>>[];
-                          for (int i = 0; i < labelControllers.length; i++) {
-                            final key = labelControllers[i].text.trim();
-                            final value = valueControllers[i].text.trim();
-                            if (key.isNotEmpty && value.isNotEmpty) {
-                              validFields.add(MapEntry(key, value));
-                            }
-                          }
-                          if (titleController.text.trim().isNotEmpty &&
-                              validFields.isNotEmpty) {
-                            // Close the bottom sheet first
-                            Navigator.pop(context);
+                      const SizedBox(height: 24),
+                      // Scrollable content
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    isEdit
+                                        ? Icons.edit_rounded
+                                        : Icons.add_rounded,
+                                    size: 28,
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    isEdit ? 'Edit Password' : 'Add Password',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .headlineSmall,
+                                  ),
+                                  const Spacer(),
+                                  IconButton.filledTonal(
+                                    icon: const Icon(Icons.close_rounded),
+                                    onPressed: () => Navigator.pop(context),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 24),
+                              TextField(
+                                controller: titleController,
+                                autofocus: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'Title',
+                                  hintText: 'e.g., Gmail Account',
+                                  prefixIcon: Icon(Icons.title_rounded),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              ...List.generate(labelControllers.length, (i) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextField(
+                                          controller: labelControllers[i],
+                                          decoration: InputDecoration(
+                                            labelText: 'Field Name',
+                                            hintText: 'e.g., Username',
+                                            prefixIcon:
+                                                const Icon(Icons.label_rounded),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: TextField(
+                                          controller: valueControllers[i],
+                                          obscureText: labelControllers[i]
+                                              .text
+                                              .toLowerCase()
+                                              .contains('password'),
+                                          decoration: InputDecoration(
+                                            labelText: 'Value',
+                                            hintText: 'Enter value',
+                                            prefixIcon: const Icon(
+                                                Icons.vpn_key_rounded),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      IconButton.outlined(
+                                        icon: const Icon(Icons.remove_rounded),
+                                        onPressed: labelControllers.length > 1
+                                            ? () {
+                                                setStateDialog(() {
+                                                  labelControllers.removeAt(i);
+                                                  valueControllers.removeAt(i);
+                                                });
+                                              }
+                                            : null,
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: FilledButton.tonalIcon(
+                                  onPressed: () {
+                                    setStateDialog(() {
+                                      labelControllers
+                                          .add(TextEditingController());
+                                      valueControllers
+                                          .add(TextEditingController());
+                                    });
+                                  },
+                                  icon: const Icon(Icons.add_rounded),
+                                  label: const Text('Add Field'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // Footer buttons - Fixed
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancel'),
+                          ),
+                          const SizedBox(width: 12),
+                          FilledButton.icon(
+                            icon: Icon(isEdit
+                                ? Icons.save_rounded
+                                : Icons.add_rounded),
+                            label: Text(isEdit ? 'Save' : 'Add'),
+                            onPressed: () async {
+                              final validFields = <MapEntry<String, String>>[];
+                              for (int i = 0;
+                                  i < labelControllers.length;
+                                  i++) {
+                                final key = labelControllers[i].text.trim();
+                                final value = valueControllers[i].text.trim();
+                                if (key.isNotEmpty && value.isNotEmpty) {
+                                  validFields.add(MapEntry(key, value));
+                                }
+                              }
+                              if (titleController.text.trim().isNotEmpty &&
+                                  validFields.isNotEmpty) {
+                                Navigator.pop(context);
 
-                            final newEntry = PasswordEntry(
-                              id: isEdit ? entry!.id : null,
-                              title: titleController.text.trim(),
-                              fields: validFields,
-                              category: widget.category,
-                            );
+                                final newEntry = PasswordEntry(
+                                  id: isEdit ? entry.id : null,
+                                  title: titleController.text.trim(),
+                                  fields: validFields,
+                                  category: widget.category,
+                                );
 
-                            if (isEdit) {
-                              await _updateEntry(newEntry);
-                            } else {
-                              await _addEntry(newEntry);
-                            }
-                          }
-                        },
-                        child: Text(isEdit ? 'Save' : 'Add'),
+                                if (isEdit) {
+                                  await _updateEntry(newEntry);
+                                } else {
+                                  await _addEntry(newEntry);
+                                }
+                              }
+                            },
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                ],
+                ),
               ),
             ),
-          ),
-        );
-      },
-    );
+          );
+        },
+      );
+    } else {
+      // Show bottom sheet for mobile
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+              left: 16,
+              right: 16,
+              top: 24,
+            ),
+            child: StatefulBuilder(
+              builder: (context, setStateSheet) => SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          isEdit ? Icons.edit_rounded : Icons.add_rounded,
+                          size: 24,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          isEdit ? 'Edit Password' : 'Add Password',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: titleController,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Title',
+                        hintText: 'e.g., Gmail Account',
+                        prefixIcon: Icon(Icons.title_rounded),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: labelControllers.length,
+                      itemBuilder: (context, i) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: labelControllers[i],
+                                  decoration:
+                                      const InputDecoration(labelText: 'Label'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: valueControllers[i],
+                                  decoration:
+                                      const InputDecoration(labelText: 'Value'),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.remove_circle),
+                                onPressed: labelControllers.length > 1
+                                    ? () {
+                                        setStateSheet(() {
+                                          labelControllers.removeAt(i);
+                                          valueControllers.removeAt(i);
+                                        });
+                                      }
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: () {
+                          setStateSheet(() {
+                            labelControllers.add(TextEditingController());
+                            valueControllers.add(TextEditingController());
+                          });
+                        },
+                        child: const Text('Add Field'),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.deepPurple,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () async {
+                            final validFields = <MapEntry<String, String>>[];
+                            for (int i = 0; i < labelControllers.length; i++) {
+                              final key = labelControllers[i].text.trim();
+                              final value = valueControllers[i].text.trim();
+                              if (key.isNotEmpty && value.isNotEmpty) {
+                                validFields.add(MapEntry(key, value));
+                              }
+                            }
+                            if (titleController.text.trim().isNotEmpty &&
+                                validFields.isNotEmpty) {
+                              Navigator.pop(context);
+
+                              final newEntry = PasswordEntry(
+                                id: isEdit ? entry.id : null,
+                                title: titleController.text.trim(),
+                                fields: validFields,
+                                category: widget.category,
+                              );
+
+                              if (isEdit) {
+                                await _updateEntry(newEntry);
+                              } else {
+                                await _addEntry(newEntry);
+                              }
+                            }
+                          },
+                          child: Text(isEdit ? 'Save' : 'Add'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          widget.category,
-          style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search by title...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-              },
-            ),
+    return Shortcuts(
+      shortcuts: <LogicalKeySet, Intent>{
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyN):
+            const NewPasswordIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyF):
+            const SearchIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          NewPasswordIntent: CallbackAction<NewPasswordIntent>(
+            onInvoke: (intent) => _showEntryBottomSheet(),
           ),
-          Expanded(
-            child: StreamBuilder<List<PasswordEntry>>(
-              stream: _firestoreService.getPasswordsStream(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-
-                // Filter passwords by category and search query
-                final allPasswords = snapshot.data ?? [];
-                final filteredEntries = allPasswords
-                    .where((password) => password.category == widget.category)
-                    .where((entry) => entry.title
-                        .toLowerCase()
-                        .contains(_searchQuery.toLowerCase()))
-                    .toList();
-
-                if (filteredEntries.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+          SearchIntent: CallbackAction<SearchIntent>(
+            onInvoke: (intent) {
+              FocusScope.of(context).requestFocus(_searchFocusNode);
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            appBar: _isDesktop()
+                ? null
+                : AppBar(
+                    title: Text(
+                      widget.category,
+                      style: const TextStyle(
+                          fontSize: 26, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+            body: Column(
+              children: [
+                // Desktop header - Material 3 styled
+                if (_isDesktop())
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 20),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
+                    child: Row(
                       children: [
-                        Icon(Icons.lock_outline, size: 64, color: Colors.grey),
-                        SizedBox(height: 16),
-                        Text(_searchQuery.isEmpty
-                            ? 'No passwords in this category'
-                            : 'No passwords found'),
-                        SizedBox(height: 8),
-                        Text(_searchQuery.isEmpty
-                            ? 'Tap + to add your first password'
-                            : 'Try a different search term'),
+                        IconButton.filledTonal(
+                          icon: const Icon(Icons.arrow_back_rounded),
+                          onPressed: () => Navigator.pop(context),
+                          tooltip: 'Back to Categories',
+                        ),
+                        const SizedBox(width: 16),
+                        Icon(
+                          Icons.lock_rounded,
+                          size: 28,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          widget.category,
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurface,
+                                fontWeight: FontWeight.w500,
+                              ),
+                        ),
+                        const Spacer(),
+                        if (_isDesktop())
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.keyboard_rounded,
+                                  size: 16,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Ctrl+N: New  •  Ctrl+F: Search',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelMedium
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
-                  );
-                }
+                  ),
+                // Search field - Material 3 styled
+                Padding(
+                  padding: EdgeInsets.all(_isDesktop() ? 24.0 : 16.0),
+                  child: TextField(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    decoration: InputDecoration(
+                      hintText: 'Search passwords...',
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded),
+                              onPressed: () {
+                                setState(() {
+                                  _searchQuery = '';
+                                  _searchController.clear();
+                                });
+                              },
+                            )
+                          : null,
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value;
+                      });
+                    },
+                  ),
+                ),
+                // Search results indicator - Material 3 chip
+                if (_searchQuery.isNotEmpty)
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: _isDesktop() ? 24.0 : 16.0,
+                    ),
+                    child: StreamBuilder<List<PasswordEntry>>(
+                      stream: _firestoreService.getPasswordsStream(),
+                      builder: (context, snapshot) {
+                        final allPasswords = snapshot.data ?? [];
+                        final count = allPasswords
+                            .where((p) => p.category == widget.category)
+                            .where((entry) => _matchesSearchQuery(entry))
+                            .length;
 
-                return ListView.builder(
-                  itemCount: filteredEntries.length,
-                  itemBuilder: (context, index) {
-                    final entry = filteredEntries[index];
-                    return Dismissible(
-                      key: ValueKey(entry.id ?? entry.title),
-                      direction: DismissDirection.endToStart,
-                      background: Container(
-                        color: Colors.red,
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: const Icon(Icons.delete, color: Colors.white),
-                      ),
-                      confirmDismiss: (direction) async {
-                        // Prevent auto-dismiss, just reveal the background
-                        return false;
+                        return Chip(
+                          avatar: Icon(
+                            Icons.search_rounded,
+                            size: 18,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSecondaryContainer,
+                          ),
+                          label: Text(
+                            'Found $count result${count != 1 ? 's' : ''}',
+                          ),
+                          backgroundColor:
+                              Theme.of(context).colorScheme.secondaryContainer,
+                          labelStyle: TextStyle(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSecondaryContainer,
+                          ),
+                          deleteIcon: const Icon(Icons.clear_rounded, size: 18),
+                          onDeleted: () {
+                            setState(() {
+                              _searchQuery = '';
+                              _searchController.clear();
+                            });
+                          },
+                        );
                       },
-                      child: SwipeToDeleteCard(
-                        entry: entry,
-                        onCopy: _copyToClipboard,
-                        onDelete: () => _deleteEntry(entry),
-                        onTap: () => _showEntryBottomSheet(entry: entry),
-                      ),
-                    );
-                  },
-                );
-              },
+                    ),
+                  ),
+                if (_searchQuery.isNotEmpty) const SizedBox(height: 12),
+                // Password list
+                Expanded(
+                  child: StreamBuilder<List<PasswordEntry>>(
+                    stream: _firestoreService.getPasswordsStream(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      if (snapshot.hasError) {
+                        return Center(child: Text('Error: ${snapshot.error}'));
+                      }
+
+                      // Filter passwords by category and search query
+                      final allPasswords = snapshot.data ?? [];
+                      final filteredEntries = allPasswords
+                          .where((password) =>
+                              password.category == widget.category)
+                          .where((entry) => _matchesSearchQuery(entry))
+                          .toList();
+
+                      if (filteredEntries.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.key_off_rounded,
+                                size: 64,
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                              const SizedBox(height: 24),
+                              Text(
+                                _searchQuery.isEmpty
+                                    ? 'No passwords yet'
+                                    : 'No passwords found',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface,
+                                    ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                _searchQuery.isEmpty
+                                    ? 'Add your first password'
+                                    : 'Try a different search term',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      if (_isDesktop()) {
+                        // Desktop grid layout with dynamic heights
+                        return SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Wrap(
+                            spacing: 16,
+                            runSpacing: 16,
+                            children: filteredEntries.map((entry) {
+                              return SizedBox(
+                                width:
+                                    (MediaQuery.of(context).size.width - 64) /
+                                        2,
+                                child: DesktopPasswordCard(
+                                  entry: entry,
+                                  onCopy: _copyToClipboard,
+                                  onDelete: () => _deleteEntry(entry),
+                                  onTap: () =>
+                                      _showEntryBottomSheet(entry: entry),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        );
+                      } else {
+                        // Mobile list layout
+                        return ListView.builder(
+                          itemCount: filteredEntries.length,
+                          itemBuilder: (context, index) {
+                            final entry = filteredEntries[index];
+                            return SwipeToDeleteCard(
+                              entry: entry,
+                              onCopy: _copyToClipboard,
+                              onDelete: () => _deleteEntry(entry),
+                              onTap: () => _showEntryBottomSheet(entry: entry),
+                            );
+                          },
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+            floatingActionButton: FloatingActionButton.extended(
+              onPressed: () => _showEntryBottomSheet(),
+              tooltip: _isDesktop() ? 'Add Password (Ctrl+N)' : 'Add Password',
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add Password'),
             ),
           ),
-        ],
+        ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showEntryBottomSheet(),
-        tooltip: 'Add Password',
-        child: const Icon(Icons.add),
+    );
+  }
+}
+
+// Desktop-specific password card - Material 3 styled
+class DesktopPasswordCard extends StatelessWidget {
+  final PasswordEntry entry;
+  final void Function(String) onCopy;
+  final VoidCallback onDelete;
+  final VoidCallback onTap;
+
+  const DesktopPasswordCard({
+    super.key,
+    required this.entry,
+    required this.onCopy,
+    required this.onDelete,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Card(
+      elevation: 1,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.key_rounded,
+                      size: 20,
+                      color: colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      entry.title,
+                      style: textTheme.titleLarge?.copyWith(
+                        color: colorScheme.onSurface,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    icon: const Icon(Icons.more_vert_rounded),
+                    iconSize: 20,
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          icon: Icon(
+                            Icons.warning_rounded,
+                            color: colorScheme.error,
+                          ),
+                          title: const Text('Delete Password'),
+                          content: Text(
+                            'Are you sure you want to delete "${entry.title}"?',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Cancel'),
+                            ),
+                            FilledButton(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: colorScheme.error,
+                                foregroundColor: colorScheme.onError,
+                              ),
+                              onPressed: () {
+                                Navigator.pop(context);
+                                onDelete();
+                              },
+                              child: const Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Divider(color: colorScheme.outlineVariant),
+              const SizedBox(height: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: entry.fields
+                    .map((field) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      field.key,
+                                      style: textTheme.labelMedium?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      field.value,
+                                      style: textTheme.bodyLarge?.copyWith(
+                                        color: colorScheme.onSurface,
+                                        fontFamily: field.key
+                                                .toLowerCase()
+                                                .contains('password')
+                                            ? 'monospace'
+                                            : null,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton.outlined(
+                                icon: const Icon(Icons.copy_rounded, size: 18),
+                                onPressed: () => onCopy(field.value),
+                                tooltip: 'Copy ${field.key}',
+                              ),
+                            ],
+                          ),
+                        ))
+                    .toList(),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -329,38 +931,81 @@ class PasswordCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return Card(
+      elevation: 1,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              entry.title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.key_rounded,
+                    size: 18,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    entry.title,
+                    style: textTheme.titleMedium?.copyWith(
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const Divider(),
-            ...entry.fields.map((field) => Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(field.key,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold)),
-                          Text(field.value),
-                        ],
+            const SizedBox(height: 12),
+            Divider(color: colorScheme.outlineVariant),
+            const SizedBox(height: 8),
+            ...entry.fields.map((field) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              field.key,
+                              style: textTheme.labelSmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              field.value,
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurface,
+                                fontFamily:
+                                    field.key.toLowerCase().contains('password')
+                                        ? 'monospace'
+                                        : null,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.copy),
-                      onPressed: () => onCopy(field.value),
-                    ),
-                  ],
+                      IconButton.outlined(
+                        icon: const Icon(Icons.copy_rounded, size: 18),
+                        onPressed: () => onCopy(field.value),
+                        tooltip: 'Copy ${field.key}',
+                      ),
+                    ],
+                  ),
                 )),
           ],
         ),
@@ -462,4 +1107,13 @@ class _SwipeToDeleteCardState extends State<SwipeToDeleteCard> {
       ),
     );
   }
+}
+
+// Intent classes for keyboard shortcuts
+class NewPasswordIntent extends Intent {
+  const NewPasswordIntent();
+}
+
+class SearchIntent extends Intent {
+  const SearchIntent();
 }

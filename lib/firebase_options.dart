@@ -71,4 +71,5 @@ class DefaultFirebaseOptions {
     authDomain: 'password-manager-3c914.firebaseapp.com',
     storageBucket: 'password-manager-3c914.firebasestorage.app',
   );
+
 }

@@ -20,7 +20,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.passwords"
-        minSdk = 23
+        minSdkVersion = flutter.minSdkVersion
         //noinspection OldTargetApi
         targetSdk = 35
         versionCode = 1

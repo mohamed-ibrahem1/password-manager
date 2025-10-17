@@ -20,8 +20,9 @@ class _LockScreenState extends State<LockScreen> {
   final TextEditingController _passwordController = TextEditingController();
   bool _obscureText = true;
   // Password state
-  bool _isPasswordSet = false;
-  bool _isCreatingPassword = false;
+  bool _isPasswordSet = false; // "Has user created a password before?"
+  bool _isCreatingPassword =
+      false; // "Is user creating password for first time?"
 
   @override
   void initState() {
@@ -31,10 +32,10 @@ class _LockScreenState extends State<LockScreen> {
 
   // add initial password check method
   Future<void> _checkIfPasswordIsSet() async {
-    final prefs = await SharedPreferences.getInstance();
-    final password = prefs.getString('app_password');
+    final prefs = await SharedPreferences.getInstance(); // Open phone's storage
+    final password = prefs.getString('app_password'); // Look for saved password
     setState(() {
-      _isPasswordSet = password != null;
+      _isPasswordSet = password != null; // If found password = true, else false
       _isCreatingPassword = !_isPasswordSet && _showPasswordInput;
     });
   }
@@ -45,17 +46,19 @@ class _LockScreenState extends State<LockScreen> {
       _checking = true;
       _error = null;
     });
-    final auth = LocalAuthentication();
+    final auth = LocalAuthentication(); // Create fingerprint scanner
     try {
       final canCheck = await auth.canCheckBiometrics;
       final isSupported = await auth.isDeviceSupported();
       if (!canCheck || !isSupported) {
+        // Phone doesn't support fingerprint
         setState(() {
           _error = 'Biometric authentication not available.';
           _checking = false;
         });
         return;
       }
+      // Ask for fingerprint
       final authenticated = await auth.authenticate(
         localizedReason: 'Please authenticate to access your passwords',
         options: const AuthenticationOptions(
@@ -64,13 +67,14 @@ class _LockScreenState extends State<LockScreen> {
         ),
       );
       setState(() {
-        _authenticated = authenticated;
-        _checking = false;
+        _authenticated = authenticated; // Did fingerprint work?
+        _checking = false; // Stop loading spinner
         if (!authenticated) {
           _error = 'Authentication failed. Try again.';
         }
       });
     } catch (e) {
+      // Something went wrong
       setState(() {
         _error = 'Error: $e';
         _checking = false;
@@ -86,34 +90,37 @@ class _LockScreenState extends State<LockScreen> {
       setState(() {
         _error = 'Password must be at least 6 characters';
       });
-      return;
+      return; // Stop here, don't continue
     }
-
+    // Save password to phone storage
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('app_password', _passwordController.text);
 
     setState(() {
-      _isPasswordSet = true;
-      _isCreatingPassword = false;
+      _isPasswordSet = true; // "Password is now saved"
+      _isCreatingPassword = false; // "Not creating anymore"
       _error = null;
-      _authenticated = true;
+      _authenticated = true; // "User is now logged in"
     });
   }
 
   // Verify existing password
   Future<void> _verifyPassword() async {
     final prefs = await SharedPreferences.getInstance();
-    final storedPassword = prefs.getString('app_password');
+    final storedPassword =
+        prefs.getString('app_password'); // Get saved password
 
-    if (storedPassword == _passwordController.text) {
+    if (storedPassword == _passwordController.text) // Does it match?
+
+    {
       setState(() {
-        _authenticated = true;
+        _authenticated = true; // "Correct! Let them in"
         _error = null;
       });
     } else {
       setState(() {
-        _error = 'Incorrect password';
-        _passwordController.clear();
+        _error = 'Incorrect password'; // "Wrong password!"
+        _passwordController.clear(); // Clear the input field
       });
     }
   }
@@ -126,6 +133,7 @@ class _LockScreenState extends State<LockScreen> {
       _isCreatingPassword = !_isPasswordSet && _showPasswordInput;
     });
   }
+////////////////////////////////////////////////////////////////////////////
 
   // UI for the lock screen
   @override
@@ -153,6 +161,7 @@ class _LockScreenState extends State<LockScreen> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 40),
+                    // that condition means if the password screen not active right now
                     if (!_showPasswordInput) ...[
                       ElevatedButton.icon(
                         icon: const Icon(Icons.fingerprint),
