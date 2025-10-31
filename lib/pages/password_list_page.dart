@@ -36,10 +36,12 @@ class _PasswordListPageState extends State<PasswordListPage> {
   Future<void> _addEntry(PasswordEntry entry) async {
     try {
       await _firestoreService.savePassword(entry);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Password added successfully')),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error adding password: $e')),
       );
@@ -49,10 +51,12 @@ class _PasswordListPageState extends State<PasswordListPage> {
   Future<void> _updateEntry(PasswordEntry entry) async {
     try {
       await _firestoreService.updatePassword(entry);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Password updated successfully')),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error updating password: $e')),
       );
@@ -62,10 +66,12 @@ class _PasswordListPageState extends State<PasswordListPage> {
   Future<void> _deleteEntry(PasswordEntry entry) async {
     try {
       await _firestoreService.deletePassword(entry.id!);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Password deleted')),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error deleting password: $e')),
       );
@@ -163,31 +169,6 @@ class _PasswordListPageState extends State<PasswordListPage> {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    isEdit
-                                        ? Icons.edit_rounded
-                                        : Icons.add_rounded,
-                                    size: 28,
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    isEdit ? 'Edit Password' : 'Add Password',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .headlineSmall,
-                                  ),
-                                  const Spacer(),
-                                  IconButton.filledTonal(
-                                    icon: const Icon(Icons.close_rounded),
-                                    onPressed: () => Navigator.pop(context),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 24),
                               TextField(
                                 controller: titleController,
                                 autofocus: true,
@@ -198,54 +179,96 @@ class _PasswordListPageState extends State<PasswordListPage> {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              ...List.generate(labelControllers.length, (i) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 16),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextField(
-                                          controller: labelControllers[i],
-                                          decoration: InputDecoration(
-                                            labelText: 'Field Name',
-                                            hintText: 'e.g., Username',
-                                            prefixIcon:
-                                                const Icon(Icons.label_rounded),
+                              ReorderableListView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: labelControllers.length,
+                                onReorder: (oldIndex, newIndex) {
+                                  setStateDialog(() {
+                                    if (newIndex > oldIndex) {
+                                      newIndex -= 1;
+                                    }
+                                    final labelController =
+                                        labelControllers.removeAt(oldIndex);
+                                    final valueController =
+                                        valueControllers.removeAt(oldIndex);
+                                    labelControllers.insert(
+                                        newIndex, labelController);
+                                    valueControllers.insert(
+                                        newIndex, valueController);
+                                  });
+                                },
+                                itemBuilder: (context, i) {
+                                  return Padding(
+                                    key: ValueKey('field_$i'),
+                                    padding: const EdgeInsets.only(bottom: 16),
+                                    child: Row(
+                                      children: [
+                                        ReorderableDragStartListener(
+                                          index: i,
+                                          child: MouseRegion(
+                                            cursor: SystemMouseCursors.grab,
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(8),
+                                              child: Icon(
+                                                Icons.drag_indicator_rounded,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                                size: 20,
+                                              ),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: TextField(
-                                          controller: valueControllers[i],
-                                          obscureText: labelControllers[i]
-                                              .text
-                                              .toLowerCase()
-                                              .contains('password'),
-                                          decoration: InputDecoration(
-                                            labelText: 'Value',
-                                            hintText: 'Enter value',
-                                            prefixIcon: const Icon(
-                                                Icons.vpn_key_rounded),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: TextField(
+                                            controller: labelControllers[i],
+                                            decoration: const InputDecoration(
+                                              labelText: 'Field Name',
+                                              hintText: 'e.g., Username',
+                                              prefixIcon:
+                                                  Icon(Icons.label_rounded),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      IconButton.outlined(
-                                        icon: const Icon(Icons.remove_rounded),
-                                        onPressed: labelControllers.length > 1
-                                            ? () {
-                                                setStateDialog(() {
-                                                  labelControllers.removeAt(i);
-                                                  valueControllers.removeAt(i);
-                                                });
-                                              }
-                                            : null,
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: TextField(
+                                            controller: valueControllers[i],
+                                            obscureText: labelControllers[i]
+                                                .text
+                                                .toLowerCase()
+                                                .contains('password'),
+                                            decoration: const InputDecoration(
+                                              labelText: 'Value',
+                                              hintText: 'Enter value',
+                                              prefixIcon:
+                                                  Icon(Icons.vpn_key_rounded),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        IconButton.outlined(
+                                          icon: const Icon(
+                                              Icons.delete_outline_rounded),
+                                          onPressed: labelControllers.length > 1
+                                              ? () {
+                                                  setStateDialog(() {
+                                                    labelControllers
+                                                        .removeAt(i);
+                                                    valueControllers
+                                                        .removeAt(i);
+                                                  });
+                                                }
+                                              : null,
+                                          tooltip: 'Remove field',
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
                               Align(
                                 alignment: Alignment.centerLeft,
                                 child: FilledButton.tonalIcon(
@@ -363,15 +386,43 @@ class _PasswordListPageState extends State<PasswordListPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    ListView.builder(
+                    ReorderableListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: labelControllers.length,
+                      onReorder: (oldIndex, newIndex) {
+                        setStateSheet(() {
+                          if (newIndex > oldIndex) {
+                            newIndex -= 1;
+                          }
+                          final labelController =
+                              labelControllers.removeAt(oldIndex);
+                          final valueController =
+                              valueControllers.removeAt(oldIndex);
+                          labelControllers.insert(newIndex, labelController);
+                          valueControllers.insert(newIndex, valueController);
+                        });
+                      },
                       itemBuilder: (context, i) {
                         return Padding(
+                          key: ValueKey('mobile_field_$i'),
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Row(
                             children: [
+                              ReorderableDragStartListener(
+                                index: i,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8),
+                                  child: Icon(
+                                    Icons.drag_indicator_rounded,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                    size: 20,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: TextField(
                                   controller: labelControllers[i],
@@ -388,7 +439,7 @@ class _PasswordListPageState extends State<PasswordListPage> {
                                 ),
                               ),
                               IconButton(
-                                icon: const Icon(Icons.remove_circle),
+                                icon: const Icon(Icons.delete_outline_rounded),
                                 onPressed: labelControllers.length > 1
                                     ? () {
                                         setStateSheet(() {
@@ -397,6 +448,7 @@ class _PasswordListPageState extends State<PasswordListPage> {
                                         });
                                       }
                                     : null,
+                                tooltip: 'Remove field',
                               ),
                             ],
                           ),
