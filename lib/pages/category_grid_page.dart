@@ -6,7 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:passwords/pages/password_generator_page.dart';
 import 'package:passwords/pages/password_list_page.dart';
 
+import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
+import 'login_page.dart';
+import 'security_settings_page.dart';
 
 class CategoryGridPage extends StatefulWidget {
   const CategoryGridPage({super.key});
@@ -17,6 +20,7 @@ class CategoryGridPage extends StatefulWidget {
 
 class _CategoryGridPageState extends State<CategoryGridPage> {
   final FirestoreService _firestoreService = FirestoreService();
+  final AuthService _authService = AuthService();
   final List<String> _categories = [];
   bool _isLoading = true;
 
@@ -255,6 +259,85 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
                   onPressed: _loadCategories,
                   tooltip: 'Refresh Categories',
                 ),
+                // User Profile Menu
+                PopupMenuButton<String>(
+                  icon: CircleAvatar(
+                    backgroundColor: colorScheme.primaryContainer,
+                    radius: 16,
+                    backgroundImage: _authService.userPhotoUrl != null
+                        ? NetworkImage(_authService.userPhotoUrl!)
+                        : null,
+                    child: _authService.userPhotoUrl == null
+                        ? Icon(
+                            Icons.person_rounded,
+                            size: 20,
+                            color: colorScheme.onPrimaryContainer,
+                          )
+                        : null,
+                  ),
+                  tooltip: 'Account Menu',
+                  itemBuilder: (context) => [
+                    PopupMenuItem<String>(
+                      enabled: false,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _authService.userDisplayName,
+                            style: textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            _authService.userEmail,
+                            style: textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    PopupMenuItem<String>(
+                      value: 'settings',
+                      child: const Row(
+                        children: [
+                          Icon(Icons.security_rounded),
+                          SizedBox(width: 12),
+                          Text('Security Settings'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'logout',
+                      child: const Row(
+                        children: [
+                          Icon(Icons.logout_rounded),
+                          SizedBox(width: 12),
+                          Text('Sign Out'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onSelected: (value) async {
+                    if (value == 'settings') {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SecuritySettingsPage(),
+                        ),
+                      );
+                    } else if (value == 'logout') {
+                      await _authService.signOut();
+                      if (!mounted) return;
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(
+                          builder: (context) => const LoginPage(),
+                        ),
+                      );
+                    }
+                  },
+                ),
               ],
             ),
       body: Column(
@@ -299,6 +382,84 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
                     icon: const Icon(Icons.refresh_rounded),
                     onPressed: _loadCategories,
                     tooltip: 'Refresh Categories',
+                  ),
+                  const SizedBox(width: 12),
+                  // User Profile Menu
+                  PopupMenuButton<String>(
+                    icon: CircleAvatar(
+                      backgroundColor: colorScheme.primaryContainer,
+                      backgroundImage: _authService.userPhotoUrl != null
+                          ? NetworkImage(_authService.userPhotoUrl!)
+                          : null,
+                      child: _authService.userPhotoUrl == null
+                          ? Icon(
+                              Icons.person_rounded,
+                              color: colorScheme.onPrimaryContainer,
+                            )
+                          : null,
+                    ),
+                    tooltip: 'Account Menu',
+                    itemBuilder: (context) => [
+                      PopupMenuItem<String>(
+                        enabled: false,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _authService.userDisplayName,
+                              style: textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              _authService.userEmail,
+                              style: textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem<String>(
+                        value: 'settings',
+                        child: const Row(
+                          children: [
+                            Icon(Icons.security_rounded),
+                            SizedBox(width: 12),
+                            Text('Security Settings'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'logout',
+                        child: const Row(
+                          children: [
+                            Icon(Icons.logout_rounded),
+                            SizedBox(width: 12),
+                            Text('Sign Out'),
+                          ],
+                        ),
+                      ),
+                    ],
+                    onSelected: (value) async {
+                      if (value == 'settings') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SecuritySettingsPage(),
+                          ),
+                        );
+                      } else if (value == 'logout') {
+                        await _authService.signOut();
+                        if (!mounted) return;
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (context) => const LoginPage(),
+                          ),
+                        );
+                      }
+                    },
                   ),
                 ],
               ),
@@ -481,11 +642,11 @@ class DesktopLongPressDetector extends StatefulWidget {
   final Duration duration;
 
   const DesktopLongPressDetector({
-    Key? key,
+    super.key,
     required this.child,
     required this.onLongPress,
     this.duration = const Duration(milliseconds: 500),
-  }) : super(key: key);
+  });
 
   @override
   State<DesktopLongPressDetector> createState() =>
