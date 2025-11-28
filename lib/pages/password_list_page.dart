@@ -20,10 +20,19 @@ class _PasswordListPageState extends State<PasswordListPage> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
+  final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey =
+      GlobalKey<RefreshIndicatorState>();
 
   bool _isDesktop() {
     if (kIsWeb) return false;
     return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+  }
+
+  Future<void> _refreshPasswords() async {
+    // Force rebuild to refresh data from Firestore
+    setState(() {});
+    // Add a small delay to show the refresh indicator
+    await Future.delayed(const Duration(milliseconds: 500));
   }
 
   @override
@@ -705,107 +714,145 @@ class _PasswordListPageState extends State<PasswordListPage> {
                 if (_searchQuery.isNotEmpty) const SizedBox(height: 12),
                 // Password list
                 Expanded(
-                  child: StreamBuilder<List<PasswordEntry>>(
-                    stream: _firestoreService.getPasswordsStream(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
+                  child: RefreshIndicator(
+                    key: _refreshIndicatorKey,
+                    onRefresh: _refreshPasswords,
+                    child: StreamBuilder<List<PasswordEntry>>(
+                      stream: _firestoreService.getPasswordsStream(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                              child: CircularProgressIndicator());
+                        }
 
-                      if (snapshot.hasError) {
-                        return Center(child: Text('Error: ${snapshot.error}'));
-                      }
+                        if (snapshot.hasError) {
+                          return Center(
+                              child: Text('Error: ${snapshot.error}'));
+                        }
 
-                      // Filter passwords by category and search query
-                      final allPasswords = snapshot.data ?? [];
-                      final filteredEntries = allPasswords
-                          .where((password) =>
-                              password.category == widget.category)
-                          .where((entry) => _matchesSearchQuery(entry))
-                          .toList();
+                        // Filter passwords by category and search query
+                        final allPasswords = snapshot.data ?? [];
+                        final filteredEntries = allPasswords
+                            .where((password) =>
+                                password.category == widget.category)
+                            .where((entry) => _matchesSearchQuery(entry))
+                            .toList();
 
-                      if (filteredEntries.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.key_off_rounded,
-                                size: 64,
-                                color: Theme.of(context).colorScheme.outline,
-                              ),
-                              const SizedBox(height: 24),
-                              Text(
-                                _searchQuery.isEmpty
-                                    ? 'No passwords yet'
-                                    : 'No passwords found',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineSmall
-                                    ?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurface,
+                        if (filteredEntries.isEmpty) {
+                          // Make empty state scrollable for RefreshIndicator to work
+                          return LayoutBuilder(
+                            builder: (context, constraints) {
+                              return SingleChildScrollView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    minHeight: constraints.maxHeight,
+                                  ),
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.key_off_rounded,
+                                          size: 64,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .outline,
+                                        ),
+                                        const SizedBox(height: 24),
+                                        Text(
+                                          _searchQuery.isEmpty
+                                              ? 'No passwords yet'
+                                              : 'No passwords found',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .headlineSmall
+                                              ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurface,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          _searchQuery.isEmpty
+                                              ? 'Add your first password'
+                                              : 'Try a different search term',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          'Pull down to refresh',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .outline,
+                                              ),
+                                        ),
+                                      ],
                                     ),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                _searchQuery.isEmpty
-                                    ? 'Add your first password'
-                                    : 'Try a different search term',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                    ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-
-                      if (_isDesktop()) {
-                        // Desktop grid layout with dynamic heights
-                        return SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Wrap(
-                            spacing: 16,
-                            runSpacing: 16,
-                            children: filteredEntries.map((entry) {
-                              return SizedBox(
-                                width:
-                                    (MediaQuery.of(context).size.width - 64) /
-                                        2,
-                                child: DesktopPasswordCard(
-                                  entry: entry,
-                                  onCopy: _copyToClipboard,
-                                  onDelete: () => _deleteEntry(entry),
-                                  onTap: () =>
-                                      _showEntryBottomSheet(entry: entry),
+                                  ),
                                 ),
                               );
-                            }).toList(),
-                          ),
-                        );
-                      } else {
-                        // Mobile list layout
-                        return ListView.builder(
-                          itemCount: filteredEntries.length,
-                          itemBuilder: (context, index) {
-                            final entry = filteredEntries[index];
-                            return SwipeToDeleteCard(
-                              entry: entry,
-                              onCopy: _copyToClipboard,
-                              onDelete: () => _deleteEntry(entry),
-                              onTap: () => _showEntryBottomSheet(entry: entry),
-                            );
-                          },
-                        );
-                      }
-                    },
+                            },
+                          );
+                        }
+
+                        if (_isDesktop()) {
+                          // Desktop grid layout with dynamic heights
+                          return SingleChildScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Wrap(
+                              spacing: 16,
+                              runSpacing: 16,
+                              children: filteredEntries.map((entry) {
+                                return SizedBox(
+                                  width:
+                                      (MediaQuery.of(context).size.width - 64) /
+                                          2,
+                                  child: DesktopPasswordCard(
+                                    entry: entry,
+                                    onCopy: _copyToClipboard,
+                                    onDelete: () => _deleteEntry(entry),
+                                    onTap: () =>
+                                        _showEntryBottomSheet(entry: entry),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          );
+                        } else {
+                          // Mobile list layout
+                          return ListView.builder(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            itemCount: filteredEntries.length,
+                            itemBuilder: (context, index) {
+                              final entry = filteredEntries[index];
+                              return SwipeToDeleteCard(
+                                entry: entry,
+                                onCopy: _copyToClipboard,
+                                onDelete: () => _deleteEntry(entry),
+                                onTap: () =>
+                                    _showEntryBottomSheet(entry: entry),
+                              );
+                            },
+                          );
+                        }
+                      },
+                    ),
                   ),
                 ),
               ],
