@@ -5,8 +5,12 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
   bitsdojo_window_windows
+  file_selector_windows
+  irondash_engine_context
   local_auth_windows
   screen_retriever_windows
+  share_plus
+  super_native_extensions
   url_launcher_windows
   window_manager
 )

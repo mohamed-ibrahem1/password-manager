@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'config/supabase_config.dart';
 import 'pages/biometric_lock_screen.dart';
-import 'pages/category_grid_page.dart';
+import 'pages/home_page.dart';
 import 'pages/login_page.dart';
 import 'services/auth_service.dart';
 
@@ -96,7 +96,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
 
         // Both authentications passed - show app
-        return const CategoryGridPage();
+        return const HomePage();
       },
     );
   }

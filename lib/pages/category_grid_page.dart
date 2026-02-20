@@ -38,13 +38,18 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
   Future<void> _loadCategories() async {
     setState(() => _isLoading = true);
     try {
-      // Get unique categories from Firebase passwords
+      // Get unique categories from database passwords
       final passwords = await _firestoreService.getPasswords();
-      final categories = passwords.map((p) => p.category).toSet().toList();
+      final dbCategories = passwords.map((p) => p.category).toSet();
+      // Get locally persisted categories (includes empty ones)
+      final savedCategories = await _firestoreService.getSavedCategories();
+      // Merge both sets
+      final allCategories = {...dbCategories, ...savedCategories}.toList();
+      allCategories.sort();
 
       setState(() {
         _categories.clear();
-        _categories.addAll(categories);
+        _categories.addAll(allCategories);
         _isLoading = false;
       });
     } catch (e) {
@@ -73,6 +78,7 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
           onSubmitted: (value) {
             if (value.trim().isNotEmpty &&
                 !_categories.contains(value.trim())) {
+              _firestoreService.saveCategory(value.trim());
               setState(() {
                 _categories.add(value.trim());
               });
@@ -90,6 +96,7 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
             onPressed: () {
               if (newCategory.trim().isNotEmpty &&
                   !_categories.contains(newCategory.trim())) {
+                _firestoreService.saveCategory(newCategory.trim());
                 setState(() {
                   _categories.add(newCategory.trim());
                 });
@@ -181,6 +188,9 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
       for (final password in categoryPasswords) {
         await _firestoreService.deletePassword(password.id!);
       }
+
+      // Also remove the persisted category
+      await _firestoreService.removeSavedCategory(category);
 
       // Refresh categories
       await _loadCategories();
@@ -627,6 +637,7 @@ class _CategoryGridPageState extends State<CategoryGridPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'addPasswordCategory',
         onPressed: _showAddCategoryDialog,
         icon: const Icon(Icons.add_rounded),
         label: const Text('New Category'),

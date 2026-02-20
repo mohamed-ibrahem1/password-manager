@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'pages/category_grid_page.dart';
+import 'pages/home_page.dart';
 
 class PasswordManagerApp extends StatelessWidget {
   const PasswordManagerApp({super.key});
@@ -341,7 +341,7 @@ class WindowsPasswordManager extends StatelessWidget {
           ),
           // Main content
           const Expanded(
-            child: CategoryGridPage(),
+            child: HomePage(),
           ),
         ],
       ),
